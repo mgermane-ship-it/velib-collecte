@@ -1,0 +1,38 @@
+name: Collecte Velib
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # toutes les 30 min (heure UTC)
+  workflow_dispatch:          # bouton "Run workflow" pour lancer a la main
+
+permissions:
+  contents: write             # autorise le workflow a commiter le CSV
+
+concurrency:
+  group: collecte-velib
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Installation de pandas et requests
+        run: pip install pandas requests
+
+      - name: Releve des stations
+        run: python collect.py
+
+      - name: Commit du CSV
+        run: |
+          git config user.name "velib-bot"
+          git config user.email "velib-bot@users.noreply.github.com"
+          git add data/velib_releves.csv
+          git commit -m "Releve $(date -u +'%Y-%m-%d %H:%M') UTC" || echo "Rien a commiter"
+          git pull --rebase
+          git push
