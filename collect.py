@@ -1,59 +1,41 @@
 """
-Collecte Velib' Metropole : un releve de toutes les stations, ajoute a data/velib_releves.csv.
+Collecte Velib' : telecharge le CSV temps reel de la Ville de Paris (data.gouv.fr)
+et l'ajoute a data/velib_releves.csv avec l'heure du releve.
 Lance toutes les 30 min par GitHub Actions (.github/workflows/collect.yml).
-Source : flux GBFS ouvert de Velib' Metropole, sans cle d'API.
+Source : https://www.data.gouv.fr/datasets/stations-velib-disponibilites-en-temps-reel-prs
 """
 
+import io
 import os
 from datetime import datetime, timezone
 
 import pandas as pd
 import requests
 
-BASE = "https://velib-metropole-opendata.smovengo.cloud/opendata/Velib_Metropole"
+URL = "https://www.data.gouv.fr/api/1/datasets/r/b730bbcf-759b-4f5f-849f-a32edcaf5668"
 OUT = "data/velib_releves.csv"
-
-
-def read_feed(name):
-    """Lit un flux GBFS et renvoie la liste des stations sous forme de DataFrame."""
-    resp = requests.get(f"{BASE}/{name}.json", timeout=30, headers={"User-Agent": "projet-ml-albert"})
-    resp.raise_for_status()
-    return pd.DataFrame(resp.json()["data"]["stations"])
-
-
-def split_bike_types(types):
-    """Le flux donne [{'mechanical': 3}, {'ebike': 2}] : on le transforme en deux colonnes."""
-    out = {"mechanical": None, "ebike": None}
-    for item in types if isinstance(types, list) else []:
-        out.update({k: v for k, v in item.items() if k in out})
-    return pd.Series(out)
 
 
 def main():
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
-    # 1. Lecture des deux flux
-    info = read_feed("station_information")[["station_id", "stationCode", "name", "lat", "lon", "capacity"]]
-    status = read_feed("station_status")
+    # 1. Telechargement du CSV (data.gouv redirige vers le fichier a jour)
+    resp = requests.get(URL, timeout=60, headers={"User-Agent": "projet-ml-albert"})
+    resp.raise_for_status()
 
-    # 2. Detail mecanique / electrique
-    status = pd.concat([status, status["num_bikes_available_types"].apply(split_bike_types)], axis=1)
-    status = status[[
-        "station_id", "num_bikes_available", "mechanical", "ebike", "num_docks_available",
-        "is_installed", "is_renting", "is_returning", "last_reported",
-    ]]
+    # 2. Lecture avec pandas : separateur detecte automatiquement (";" ou ","),
+    #    utf-8-sig retire un eventuel caractere invisible en debut de fichier
+    df = pd.read_csv(io.StringIO(resp.content.decode("utf-8-sig")), sep=None, engine="python")
 
-    # 3. Fusion sur station_id, horodatage du releve
-    df = status.merge(info, on="station_id", how="left")
-    df["last_reported"] = pd.to_datetime(df["last_reported"], unit="s", utc=True)
+    # 3. Heure du releve en premiere colonne
     df.insert(0, "collected_at", now)
-    df = df.rename(columns={"stationCode": "station_code"})
 
     # 4. Ajout au CSV (en-tete seulement a la creation du fichier)
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     df.to_csv(OUT, mode="a", header=not os.path.exists(OUT), index=False)
 
     print(f"{now} : {len(df)} stations ajoutees a {OUT}")
+    print("Colonnes :", list(df.columns))
 
 
 if __name__ == "__main__":
