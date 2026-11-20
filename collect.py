@@ -1,8 +1,8 @@
 """
-Collecte Velib' : telecharge le CSV temps reel de la Ville de Paris (data.gouv.fr)
-et l'ajoute a data/velib_releves.csv avec l'heure du releve.
-Lance toutes les 30 min par GitHub Actions (.github/workflows/collect.yml).
-Source : https://www.data.gouv.fr/datasets/stations-velib-disponibilites-en-temps-reel-prs
+Collecte Velib' : Velib' collection: downloads the real-time CSV published by the City of Paris (data.gouv.fr)
+and appends it to data/velib_releves.csv, with the time of the download.
+Run every 30 minutes by GitHub Actions (.github/workflows/collect.yml).
+Source: https://www.data.gouv.fr/datasets/stations-velib-disponibilites-en-temps-reel-prs
 """
 
 import io
